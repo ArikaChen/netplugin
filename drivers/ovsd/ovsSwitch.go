@@ -458,6 +458,8 @@ func (sw *OvsSwitch) UpdatePort(intfName string, cfgEp *mastercfg.CfgEndpointSta
 
 	macAddr, _ := net.ParseMAC(cfgEp.MacAddress)
 
+	pvtIP := sw.getPvtIP(ovsPortName)
+
 	// Build the endpoint info
 	endpoint := ofnet.EndpointInfo{
 		PortNo:            ofpPort,
@@ -468,6 +470,7 @@ func (sw *OvsSwitch) UpdatePort(intfName string, cfgEp *mastercfg.CfgEndpointSta
 		EndpointGroup:     cfgEp.EndpointGroupID,
 		EndpointGroupVlan: uint16(pktTag),
 		Dscp:              dscp,
+		HostPvtIP:         pvtIP,
 	}
 
 	// Add the local port to ofnet
@@ -854,9 +857,18 @@ func (sw *OvsSwitch) AddHostPort(intfName string, intfNum, network int, isHostNS
 	// Ask OVSDB driver to add the port as an access port
 	err = sw.ovsdbDriver.CreatePort(ovsPortName, ovsPortType, portID, hostVLAN, 0, 0, hostOFPort)
 	if err != nil {
-		log.Errorf("Error adding hostport %s to OVS. Err: %v", intfName, err)
+		log.Errorf("Error adding host port %s to OVS. Err: %v", intfName, err)
 		return "", err
 	}
+
+	// Wait a little for OVS to create the interface
+	time.Sleep(300 * time.Millisecond)
+
+	defer func() {
+		if err != nil {
+			sw.ovsdbDriver.DeletePort(intfName)
+		}
+	}()
 
 	// Get the openflow port number for the interface
 	ofpPort, err := sw.ovsdbDriver.GetOfpPortNo(ovsPortName)
@@ -876,9 +888,22 @@ func (sw *OvsSwitch) AddHostPort(intfName string, intfNum, network int, isHostNS
 		Kind:    "NAT",
 	}
 	// Add to ofnet if this is the hostNS port.
-	netutils.SetInterfaceMac(intfName, macStr)
-	netutils.SetInterfaceIP(intfName, ipStr)
+	err = netutils.SetInterfaceMac(intfName, macStr)
+	if err != nil {
+		log.Errorf("Failed to set host port %s mac, error: %v", intfName, err)
+		return "", err
+	}
+	err = netutils.SetInterfaceIP(intfName, ipStr)
+	if err != nil {
+		log.Errorf("Failed to set host port %s ip, error: %v", intfName, err)
+		return "", err
+	}
+
 	err = setLinkUp(intfName)
+	if err != nil {
+		log.Errorf("Failed to set host port %s up, error: %v", intfName, err)
+		return "", err
+	}
 
 	if sw.ofnetAgent != nil {
 		err = sw.ofnetAgent.AddHostPort(portInfo)
@@ -888,13 +913,7 @@ func (sw *OvsSwitch) AddHostPort(intfName string, intfNum, network int, isHostNS
 		}
 	}
 
-	log.Infof("Added host port %s to OVS switch %s.", intfName, sw.bridgeName)
-
-	defer func() {
-		if err != nil {
-			sw.ovsdbDriver.DeletePort(intfName)
-		}
-	}()
+	log.Infof("Added host port %s to OVS switch %s", intfName, sw.bridgeName)
 
 	return ipStr, nil
 }
