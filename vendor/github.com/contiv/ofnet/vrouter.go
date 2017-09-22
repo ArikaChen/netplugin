@@ -647,12 +647,8 @@ func (self *Vrouter) RemoveLocalIpv6Flow(endpoint OfnetEndpoint) error {
 	return nil
 }
 
-// Add virtual tunnel end point. This is mainly used for mapping remote vtep IP
-// to ofp port number.
-func (self *Vrouter) AddVtepPort(portNo uint32, remoteIp net.IP) error {
-	// Install VNI to vlan mapping for each vni
-	log.Infof("Adding VTEP for portno %v , remote IP : %v", portNo, remoteIp)
-	dnsVtepFlow, err := self.inputTable.NewFlow(ofctrl.FlowMatch{
+func (self *Vrouter) addDNSFlow(portNo uint32) error {
+	dnsFlow, err := self.inputTable.NewFlow(ofctrl.FlowMatch{
 		Priority:   DNS_FLOW_MATCH_PRIORITY + 2,
 		InputPort:  portNo,
 		Ethertype:  protocol.IPv4_MSG,
@@ -660,11 +656,36 @@ func (self *Vrouter) AddVtepPort(portNo uint32, remoteIp net.IP) error {
 		UdpDstPort: 53,
 	})
 	if err != nil {
+		log.Errorf("Failed to create dns flow entry, error: %v", err)
+		return err
+	}
+	dnsFlow.Next(self.vlanTable)
+	self.portDnsFlowDb.Set(fmt.Sprintf("%d", portNo), dnsFlow)
+	return nil
+}
+
+func (self *Vrouter) removeDNSFlow(portNo uint32) error {
+	if f, ok := self.portDnsFlowDb.Get(fmt.Sprintf("%d", portNo)); ok {
+		if dnsFlow, ok := f.(*ofctrl.Flow); ok {
+			if err := dnsFlow.Delete(); err != nil {
+				log.Errorf("Failed to delete dns flow, error: %v", err)
+			}
+		}
+	}
+	self.portDnsFlowDb.Remove(fmt.Sprintf("%d", portNo))
+	return nil
+}
+
+// Add virtual tunnel end point. This is mainly used for mapping remote vtep IP
+// to ofp port number.
+func (self *Vrouter) AddVtepPort(portNo uint32, remoteIp net.IP) error {
+	// Install VNI to vlan mapping for each vni
+	log.Infof("Adding VTEP for portno %v , remote IP : %v", portNo, remoteIp)
+	err := self.addDNSFlow(portNo)
+	if err != nil {
 		log.Errorf("Error creating nameserver flow entry. Err: %v", err)
 		return err
 	}
-	dnsVtepFlow.Next(self.vlanTable)
-	self.portDnsFlowDb.Set(fmt.Sprintf("%d", portNo), dnsVtepFlow)
 
 	self.agent.vlanVniMutex.RLock()
 	for vni, vlan := range self.agent.vniVlanMap {
@@ -736,14 +757,7 @@ func (self *Vrouter) AddVtepPort(portNo uint32, remoteIp net.IP) error {
 
 // Remove a VTEP port
 func (self *Vrouter) RemoveVtepPort(portNo uint32, remoteIp net.IP) error {
-	if f, ok := self.portDnsFlowDb.Get(fmt.Sprintf("%d", portNo)); ok {
-		if dnsVtepFlow, ok := f.(*ofctrl.Flow); ok {
-			if err := dnsVtepFlow.Delete(); err != nil {
-				log.Errorf("Error deleting nameserver flow. Err: %v", err)
-			}
-		}
-	}
-	self.portDnsFlowDb.Remove(fmt.Sprintf("%d", portNo))
+	self.removeDNSFlow(portNo)
 
 	for _, vlan := range self.vlanDb {
 		portVlanFlow := vlan.vtepVlanFlowDb[portNo]
