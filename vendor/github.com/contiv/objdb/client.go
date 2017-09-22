@@ -46,8 +46,13 @@ func NewClient(dbURL string) (API, error) {
 		return nil, errors.New("Unsupported DB type")
 	}
 
+	eps := strings.Split(clientURL, ",")
+	for idx, e := range eps {
+		eps[idx] = "http://" + e
+	}
+
 	// Initialize the objdb client
-	cl, err := plugin.NewClient([]string{"http://" + clientURL})
+	cl, err := plugin.NewClient(eps)
 	if err != nil {
 		log.Errorf("Error creating client %s to url %s. Err: %v", clientName, clientURL, err)
 		return nil, err
