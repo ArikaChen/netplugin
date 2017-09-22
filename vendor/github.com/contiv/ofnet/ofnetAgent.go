@@ -111,6 +111,7 @@ type EndpointInfo struct {
 	EndpointGroupVlan uint16           // Endpoint group vlan when its different from network vlan
 	Dscp              int              // DSCP value for the endpoint
 	HostPvtIP         net.IP           // IPv4 address for NAT access to host
+	IsInfra           bool
 }
 
 // HostPortInfo holds information about a host access port
@@ -587,6 +588,7 @@ func (self *OfnetAgent) AddLocalEndpoint(endpoint EndpointInfo) error {
 		Timestamp:         time.Now(),
 		EndpointGroupVlan: endpoint.EndpointGroupVlan,
 		HostPvtIP:         endpoint.HostPvtIP,
+		IsInfra:           endpoint.IsInfra,
 	}
 	self.setInternal(epreg)
 

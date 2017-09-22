@@ -315,6 +315,10 @@ func (self *Vrouter) AddLocalEndpoint(endpoint OfnetEndpoint) error {
 	if endpoint.HostPvtIP.String() != "<nil>" && self.hostNATInfo.PortNo != 0 {
 		return self.setupHostNAT(endpoint, vrfmetadata, vrfmetadataMask)
 	}
+
+	if  endpoint.IsInfra {
+		return self.addDNSFlow(endpoint.PortNo)
+	}
 	return nil
 }
 
@@ -440,6 +444,10 @@ func (self *Vrouter) RemoveLocalEndpoint(endpoint OfnetEndpoint) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	if  endpoint.IsInfra {
+		self.removeDNSFlow(endpoint.PortNo)
 	}
 
 	return nil

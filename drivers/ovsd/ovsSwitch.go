@@ -397,6 +397,7 @@ func (sw *OvsSwitch) CreatePort(intfName string, cfgEp *mastercfg.CfgEndpointSta
 		EndpointGroupVlan: uint16(pktTag),
 		Dscp:              dscp,
 		HostPvtIP:         pvtIP,
+		IsInfra:           skipVethPair,
 	}
 
 	log.Infof("Adding local endpoint: {%+v}", endpoint)
@@ -471,6 +472,7 @@ func (sw *OvsSwitch) UpdatePort(intfName string, cfgEp *mastercfg.CfgEndpointSta
 		EndpointGroupVlan: uint16(pktTag),
 		Dscp:              dscp,
 		HostPvtIP:         pvtIP,
+		IsInfra:           skipVethPair,
 	}
 
 	// Add the local port to ofnet
