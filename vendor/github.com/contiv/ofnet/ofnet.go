@@ -183,6 +183,7 @@ type OfnetEndpoint struct {
 	Dscp              int       `json:"-"` // DSCP value for the endpoint
 	Timestamp         time.Time // Timestamp of the last event
 	HostPvtIP         net.IP    `json:"-"` // Private IP
+	IsInfra           bool      `json:"-"`
 }
 
 // OfnetPolicyRule has security rule to be installed
